@@ -8,6 +8,10 @@ const PORT = 3000;
 
 app.use(cors()); // Add this line to enable CORS for all routes
 
+app.get('/', async(req,res)=>{
+    res.send("API is running")
+}
+
 // Endpoint to capture the screenshot
 app.get('/screenshot', async (req, res) => {
     try {
