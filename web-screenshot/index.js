@@ -3,7 +3,7 @@ import cors from 'cors';
 import chromium from 'chrome-aws-lambda';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 8080
 
 app.use(cors()); // Add this line to enable CORS for all routes
 
