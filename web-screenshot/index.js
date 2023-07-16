@@ -1,16 +1,10 @@
 import express from 'express';
 import puppeteer from 'puppeteer';
+import chromium from "@sparticuz/chromium";
 import cors from 'cors';
 
 const app = express();
 const PORT = 3000;
-let browser = null;
-const startBrowser = async () => {
-    browser = await puppeteer.launch({
-        headless: "new",
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-}
 
 app.use(cors()); // Add this line to enable CORS for all routes
 
@@ -26,7 +20,21 @@ app.get('/screenshot', async (req, res) => {
         if (!url.match(urlRegex)) {
             return res.status(400).json({ error: 'Invalid URL format.' });
         }
-        if (!browser) await startBrowser()
+        const browser = await puppeteer.launch({
+            args: chromium.args,
+            executablePath:
+              process.env.CHROME_EXECUTABLE_PATH || (await chromium.executablePath),
+            headless: "new",
+            ignoreHTTPSErrors: true,
+            args: [
+              "--no-sandbox",
+              "--disable-setuid-sandbox",
+              "--disable-dev-shm-usage",
+              "--single-process",
+            ],
+            ignoreDefaultArgs: ["--disable-extensions"],
+            ignoreHTTPSErrors: true,
+        });
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
         await page.goto(url, {
@@ -35,7 +43,8 @@ app.get('/screenshot', async (req, res) => {
         const screenshot = await page.screenshot({
             fullPage
         });
-        page.close()
+        await page.close()
+        await browser.close()
         res.set('Content-Type', 'image/png')
         res.send(screenshot);
     } catch (e) {
