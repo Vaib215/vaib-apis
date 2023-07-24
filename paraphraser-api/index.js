@@ -11,7 +11,16 @@ app.post('/paraphrase', async (req, res) => {
   if (!text) {
     return res.status(400).json({ error: 'Text input is required.' });
   }
-  const browser = await launch({ headless: "new" });
+  const browser = await launch({
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--single-process',
+      '--no-zygote',
+    ],
+    headless: "new",
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+  });
   try {
     const context = browser.defaultBrowserContext();
     await context.overridePermissions('https://quillbot.com', ['clipboard-read']);
