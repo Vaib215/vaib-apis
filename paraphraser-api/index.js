@@ -4,6 +4,18 @@ import { launch } from 'puppeteer';
 const app = express();
 app.use(json());
 
+// Browser pool to handle concurrent requests
+const browserPromise = launch({
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--single-process',
+    '--no-zygote',
+  ],
+  headless: true, // Use `true` instead of "new" to launch headless mode
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+});
+
 // Endpoint to handle paraphrasing requests
 app.post('/paraphrase', async (req, res) => {
   const { text } = req.body;
@@ -11,17 +23,10 @@ app.post('/paraphrase', async (req, res) => {
   if (!text) {
     return res.status(400).json({ error: 'Text input is required.' });
   }
-  const browser = await launch({
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--single-process',
-      '--no-zygote',
-    ],
-    headless: "new",
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-  });
+
+  let browser;
   try {
+    browser = await browserPromise;
     const context = browser.defaultBrowserContext();
     await context.overridePermissions('https://quillbot.com', ['clipboard-read']);
     const paraphrasedText = await paraphraseText(text, browser);
@@ -29,8 +34,6 @@ app.post('/paraphrase', async (req, res) => {
   } catch (err) {
     console.error('Error during paraphrasing:', err);
     res.status(500).json({ error: 'An error occurred during paraphrasing.' });
-  } finally {
-    await browser.close();
   }
 });
 
@@ -51,23 +54,28 @@ async function paraphraseText(inputText, browser) {
   let paraphrasedText = '';
 
   for (const chunk of chunks) {
-    await page.click("[role='textbox']");
-    await page.evaluate(() => {
-      document.execCommand('selectAll', false, null);
-      document.execCommand('delete');
-    });
+    try {
+      await page.click("[role='textbox']");
+      await page.evaluate(() => {
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete');
+      });
 
-    await page.type("[role='textbox']", chunk);
-    await page.click("#pphr-view-input-panel-footer-box > div.MuiGrid-root.MuiGrid-item > div > button");
-    await page.click("#pphr-view-input-panel-footer-box > div.MuiGrid-root.MuiGrid-item > div > button");
-    await page.waitForSelector("[aria-label='Copy Full Text']");
-    await page.click("[aria-label='Copy Full Text']");
+      await page.type("[role='textbox']", chunk);
+      await page.click("#pphr-view-input-panel-footer-box > div.MuiGrid-root.MuiGrid-item > div > button");
+      await page.click("#pphr-view-input-panel-footer-box > div.MuiGrid-root.MuiGrid-item > div > button");
+      await page.waitForSelector("[aria-label='Copy Full Text']");
+      await page.click("[aria-label='Copy Full Text']");
 
-    const chunkParaphrasedText = await page.evaluate(() => {
-      return navigator.clipboard.readText();
-    });
+      const chunkParaphrasedText = await page.evaluate(() => {
+        return navigator.clipboard.readText();
+      });
 
-    paraphrasedText += chunkParaphrasedText;
+      paraphrasedText += chunkParaphrasedText;
+    } catch (err) {
+      console.error('Error during paraphrasing:', err);
+      throw err; // Re-throw the error to be caught in the main error handler
+    }
   }
 
   await page.close();
